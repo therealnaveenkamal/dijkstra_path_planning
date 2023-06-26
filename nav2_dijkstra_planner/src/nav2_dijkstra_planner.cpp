@@ -50,102 +50,6 @@ void DijkstraGlobalPlanner::deactivate() {
   RCLCPP_INFO(node_->get_logger(), "Deactivating plugin %s", name_.c_str());
 }
 
-bool DijkstraGlobalPlanner::makePlan(
-    const geometry_msgs::msg::PoseStamped &start,
-    const geometry_msgs::msg::PoseStamped &goal,
-    std::vector<geometry_msgs::msg::PoseStamped> &plan) {
-
-  RCLCPP_INFO(
-      node_->get_logger(),
-      "Got as start position: %.2f, %.2f, and as goal position: %.2f, %.2f",
-      start.pose.position.x, start.pose.position.y, goal.pose.position.x,
-      goal.pose.position.y);
-
-  // remove all elements from the global plan vector
-  plan.clear();
-
-  // add start location to global plan vector
-  plan.push_back(start);
-
-  // create flat costmap (1-D array occupancy map representation)
-  std::vector<int> costmap_flat(map_size_);
-
-  for (size_t idx = 0; idx < map_size_; ++idx) {
-    int x, y;
-    x = idx % width_;
-    y = std::floor(idx / width_);
-    costmap_flat.at(idx) = static_cast<int>(costmap_->getCost(x, y));
-  }
-
-  // start and goal position as x and y coordinate values
-  float start_x = start.pose.position.x;
-  float start_y = start.pose.position.y;
-  float goal_x = goal.pose.position.x;
-  float goal_y = goal.pose.position.y;
-
-  // start and goal position as flat array index representation
-  size_t start_index = 0;
-  size_t goal_index = 0;
-
-  // check if start/goal world coordinates are inside grid map bounds
-  if (inGridMapBounds(start_x, start_y) && inGridMapBounds(goal_x, goal_y)) {
-    // convert start_x, start_y, goal_x, goal_y from world coordinates/meters
-    // into grid map cell coordinates
-    fromWorldToGrid(start_x, start_y);
-    fromWorldToGrid(goal_x, goal_y);
-
-    // convert grid map cell coordinates into flat array index values
-    start_index = gridCellxyToIndex(start_x, start_y);
-    goal_index = gridCellxyToIndex(goal_x, goal_y);
-  } else {
-    RCLCPP_WARN(node_->get_logger(),
-                "Start or goal position outside of the map's boundaries");
-    return false;
-  }
-
-  // empty data container that will hold the result of the search
-  std::vector<int> shortest_path;
-
-  shortest_path.clear();
-
-  // call Dijkstra algorithm
-  if (!dijkstraShortestPath(start_index, goal_index, costmap_flat,
-                            shortest_path)) {
-    return false;
-  };
-
-  // if path found is not empty, convert path from indices to pose waypoints
-  if (shortest_path.size()) {
-    // insert start node element at the beginning of shortest_path vector
-    shortest_path.insert(shortest_path.begin(), start_index);
-
-    for (int p : shortest_path) {
-      int x, y;
-      fromIndexToGridCellxy(p, x, y);
-      float x_waypoint = static_cast<float>(x);
-      float y_waypoint = static_cast<float>(y);
-      fromGridToWorld(x_waypoint, y_waypoint);
-
-      geometry_msgs::msg::PoseStamped position;
-
-      position.header.frame_id = start.header.frame_id;
-      position.pose.position.x = x_waypoint;
-      position.pose.position.y = y_waypoint;
-      position.pose.orientation.x = 0;
-      position.pose.orientation.y = 0;
-      position.pose.orientation.z = 0;
-      position.pose.orientation.w = 1;
-
-      plan.push_back(position);
-    }
-  }
-
-  // insert goal location to the end of the plan vector
-  plan.push_back(goal);
-
-  return true;
-}
-
 std::unordered_map<int, double>
 DijkstraGlobalPlanner::find_neighbors(const int &current_node_index,
                                       const std::vector<int> &costmap_flat) {
@@ -245,9 +149,16 @@ DijkstraGlobalPlanner::find_neighbors(const int &current_node_index,
 nav_msgs::msg::Path
 DijkstraGlobalPlanner::createPlan(const geometry_msgs::msg::PoseStamped &start,
                                   const geometry_msgs::msg::PoseStamped &goal) {
+  // create empty path
   nav_msgs::msg::Path global_path;
 
-  // Checking if the goal and start state is in the global frame
+  RCLCPP_INFO(
+      node_->get_logger(),
+      "Got as start position: %.2f, %.2f, and as goal position: %.2f, %.2f",
+      start.pose.position.x, start.pose.position.y, goal.pose.position.x,
+      goal.pose.position.y);
+
+  // Check if start state is in the global frame
   if (start.header.frame_id != global_frame_) {
     RCLCPP_ERROR(node_->get_logger(),
                  "Planner will only accept start position in the %s frame, but "
@@ -255,7 +166,7 @@ DijkstraGlobalPlanner::createPlan(const geometry_msgs::msg::PoseStamped &start,
                  global_frame_.c_str(), start.header.frame_id.c_str());
     return global_path;
   }
-
+  // Check if goal state is in the global frame
   if (goal.header.frame_id != global_frame_) {
     RCLCPP_INFO(node_->get_logger(),
                 "Planner will only except goal position in the %s frame, but a "
@@ -287,6 +198,22 @@ DijkstraGlobalPlanner::createPlan(const geometry_msgs::msg::PoseStamped &start,
   // start and goal position as flat array index representation
   size_t start_index = 0;
   size_t goal_index = 0;
+
+  // check if start/goal world coordinates are inside grid map bounds
+  if (inGridMapBounds(start_x, start_y) && inGridMapBounds(goal_x, goal_y)) {
+    // convert start_x, start_y, goal_x, goal_y from world coordinates/meters
+    // into grid map cell coordinates
+    fromWorldToGrid(start_x, start_y);
+    fromWorldToGrid(goal_x, goal_y);
+
+    // convert grid map cell coordinates into flat array index values
+    start_index = gridCellxyToIndex(start_x, start_y);
+    goal_index = gridCellxyToIndex(goal_x, goal_y);
+  } else {
+    RCLCPP_WARN(node_->get_logger(),
+                "Start or goal position outside of the map's boundaries");
+    return global_path;
+  }
 
   // empty data container that will hold the result of the search
   std::vector<int> shortest_path;
@@ -325,6 +252,7 @@ DijkstraGlobalPlanner::createPlan(const geometry_msgs::msg::PoseStamped &start,
       global_path.poses.push_back(pose_obj);
     }
 
+    // insert goal location to the end of the plan vector
     global_path.poses.push_back(goal);
   }
 
