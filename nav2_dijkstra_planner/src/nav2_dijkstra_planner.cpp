@@ -146,6 +146,102 @@ bool DijkstraGlobalPlanner::makePlan(
   return true;
 }
 
+std::unordered_map<int, double>
+DijkstraGlobalPlanner::find_neighbors(const int &current_node_index,
+                                      const std::vector<int> &costmap_flat) {
+
+  std::unordered_map<int, double> detected_neighbors;
+  // length of diagonal = length of one side by the square root of 2 (1.41421)
+  double diagonal_step_cost = resolution_ * 1.41421;
+  // value used to reject neighbor nodes due to considered obstacle [1-254]
+  int lethal_cost = 1;
+
+  // get index value of node above the current node
+  int upper_cell_index = current_node_index - width_;
+  // check if this neighbor node lies inside the map boundaries
+  if (upper_cell_index > 0) {
+    // check if this neighbor node is an obstacle
+    if (costmap_flat[upper_cell_index] < lethal_cost) {
+      // get step cost of moving to this neighbor node
+      double step_cost = resolution_ + costmap_flat[upper_cell_index] / 255.0;
+      // add it to the data to be returned by the function
+      detected_neighbors[upper_cell_index] = step_cost;
+    }
+  }
+
+  // get index value of node to the left of current node
+  int left_cell_index = current_node_index - 1;
+  if (left_cell_index % width_ > 0) {
+    if (costmap_flat[left_cell_index] < lethal_cost) {
+      double step_cost = resolution_ + costmap_flat[left_cell_index] / 255.0;
+      detected_neighbors[left_cell_index] = step_cost;
+    }
+  }
+
+  // get index value of node to the upper left of current node
+  int upper_left_cell_index = current_node_index - width_ - 1;
+  if (upper_left_cell_index > 0 && upper_left_cell_index % width_ > 0) {
+    if (costmap_flat[upper_left_cell_index] < lethal_cost) {
+      double step_cost =
+          resolution_ + costmap_flat[upper_left_cell_index] / 255.0;
+      detected_neighbors[upper_left_cell_index] = step_cost;
+    }
+  }
+
+  // get index value of node to the upper right of current node
+  int upper_right_cell_index = current_node_index - width_ + 1;
+  if (upper_right_cell_index > 0 &&
+      upper_right_cell_index % width_ != width_ - 1) {
+    if (costmap_flat[upper_right_cell_index] < lethal_cost) {
+      double step_cost =
+          resolution_ + costmap_flat[upper_right_cell_index] / 255.0;
+      detected_neighbors[upper_right_cell_index] = step_cost;
+    }
+  }
+
+  // get index value of node to the right of current node
+  int right_cell_index = current_node_index - width_ + 1;
+  if (right_cell_index % width_ != width_ + 1) {
+    if (costmap_flat[right_cell_index] < lethal_cost) {
+      double step_cost = resolution_ + costmap_flat[right_cell_index] / 255.0;
+      detected_neighbors[right_cell_index] = step_cost;
+    }
+  }
+
+  // get index value of node to the lower_left of current node
+  int lower_left_cell_index = current_node_index + width_ - 1;
+  if (lower_left_cell_index < height_ * width_ &&
+      lower_left_cell_index % width_ != 0) {
+    if (costmap_flat[lower_left_cell_index] < lethal_cost) {
+      double step_cost =
+          resolution_ + costmap_flat[lower_left_cell_index] / 255.0;
+      detected_neighbors[lower_left_cell_index] = step_cost;
+    }
+  }
+
+  // get index value of node below the current node
+  int lower_cell_index = current_node_index + width_;
+  if (lower_cell_index <= height_ * width_) {
+    if (costmap_flat[lower_cell_index] < lethal_cost) {
+      double step_cost = resolution_ + costmap_flat[lower_cell_index] / 255.0;
+      detected_neighbors[lower_cell_index] = step_cost;
+    }
+  }
+
+  // get index value of node below and to the right of current node
+  int lower_right_cell_index = current_node_index + width_ + 1;
+  if (lower_right_cell_index <= height_ * width_ &&
+      lower_right_cell_index % width_ != (width_ - 1)) {
+    if (costmap_flat[lower_right_cell_index] < lethal_cost) {
+      double step_cost =
+          resolution_ + costmap_flat[lower_right_cell_index] / 255.0;
+      detected_neighbors[lower_right_cell_index] = step_cost;
+    }
+  }
+
+  return detected_neighbors;
+}
+
 nav_msgs::msg::Path
 DijkstraGlobalPlanner::createPlan(const geometry_msgs::msg::PoseStamped &start,
                                   const geometry_msgs::msg::PoseStamped &goal) {
@@ -271,6 +367,35 @@ bool DijkstraGlobalPlanner::dijkstraShortestPath(
   /** YOUR CODE ENDS HERE */
 
   return true;
+}
+
+void DijkstraGlobalPlanner::fromWorldToGrid(float &x, float &y) {
+  x = static_cast<size_t>((x - origin_x_) / resolution_);
+  y = static_cast<size_t>((y - origin_y_) / resolution_);
+}
+
+bool DijkstraGlobalPlanner::inGridMapBounds(const float &x, const float &y) {
+  if (x < origin_x_ || y < origin_y_ ||
+      x > origin_x_ + (width_ * resolution_) ||
+      y > origin_y_ + (height_ * resolution_))
+    return false;
+  return true;
+}
+
+size_t DijkstraGlobalPlanner::gridCellxyToIndex(const float &x,
+                                                const float &y) {
+  return y * width_ + x;
+}
+
+void DijkstraGlobalPlanner::fromIndexToGridCellxy(size_t index, int &x,
+                                                  int &y) {
+  x = index % width_;
+  y = std::floor(index / width_);
+}
+
+void DijkstraGlobalPlanner::fromGridToWorld(float &x, float &y) {
+  x = x * resolution_ + origin_x_;
+  y = y * resolution_ + origin_y_;
 }
 
 } // namespace nav2_dijkstra_planner
