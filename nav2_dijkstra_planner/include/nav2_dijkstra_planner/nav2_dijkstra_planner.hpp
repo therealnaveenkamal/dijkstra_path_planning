@@ -75,17 +75,6 @@ private:
   std::string global_frame_, name_;
 
   /**
-   * @brief Given a goal pose in the world, compute a plan
-   * @param start The start pose
-   * @param goal The goal pose
-   * @param plan The plan... filled by the planner
-   * @return True if a valid plan was found, false otherwise
-   */
-  bool makePlan(const geometry_msgs::msg::PoseStamped &start,
-                const geometry_msgs::msg::PoseStamped &goal,
-                std::vector<geometry_msgs::msg::PoseStamped> &plan);
-
-  /**
   @brief Performs Dijkstra's shortest path algorithm search on a costmap
   @param start_cell_index index value corresponding to the start cell
   location on a one-dimensional array map
@@ -93,14 +82,14 @@ private:
   on a one-dimensional array map
   @param costmap_flat values in the occupacy grid as a flat array map
   representation
-  @param shortes_path keeps the vector indices that correspond to the grid
+  @param shortest_path keeps the vector indices that correspond to the grid
   cells that give the shortest path to the goal
   @return true on success, false if an error occurred
   */
   bool dijkstraShortestPath(const int &start_cell_index,
                             const int &goal_cell_index,
                             const std::vector<int> &costmap_flat,
-                            std::vector<int> &shortes_path);
+                            std::vector<int> &shortest_path);
 
   /**
    * @brief Checks if world coordinates are inside grid map bounds
