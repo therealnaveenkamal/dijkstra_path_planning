@@ -10,7 +10,7 @@ def generate_launch_description():
     nav2_yaml = os.path.join(get_package_share_directory(
         'localization_server'), 'config', 'amcl_config.yaml')
     map_file = os.path.join(get_package_share_directory(
-        'map_server'), 'maps', 'neobotix_area.yaml')
+        'map_server'), 'maps', 'neo_track1_cropped.yaml')
 
     return LaunchDescription([
         Node(
