@@ -50,100 +50,106 @@ void DijkstraGlobalPlanner::deactivate() {
   RCLCPP_INFO(node_->get_logger(), "Deactivating plugin %s", name_.c_str());
 }
 
-std::unordered_map<int, double>
-DijkstraGlobalPlanner::find_neighbors(const int &current_node_index,
-                                      const std::vector<int> &costmap_flat) {
+std::unordered_map<int, double>DijkstraGlobalPlanner::find_neighbors(const int &current_node_index, const std::vector<int> &costmap_flat) {
+   
+    std::unordered_map<int, double> detected_neighbors;
+    // length of diagonal = length of one side by the square root of 2 (1.41421)
+    double diagonal_step_cost = resolution_ * 1.41421;
+    // value used to reject neighbor nodes due to considered obstacle [1-254]
+    int lethal_cost = 1;
 
-  std::unordered_map<int, double> detected_neighbors;
-  // length of diagonal = length of one side by the square root of 2 (1.41421)
-  double diagonal_step_cost = resolution_ * 1.41421;
-  // value used to reject neighbor nodes due to considered obstacle [1-254]
-  int lethal_cost = 1;
-
-  // get index value of node above the current node
-  int upper_cell_index = current_node_index - width_;
-  // check if this neighbor node lies inside the map boundaries
-  if (upper_cell_index > 0) {
-    // check if this neighbor node is an obstacle
-    if (costmap_flat[upper_cell_index] < lethal_cost) {
-      // get step cost of moving to this neighbor node
-      double step_cost = resolution_ + costmap_flat[upper_cell_index] / 255.0;
-      // add it to the data to be returned by the function
-      detected_neighbors[upper_cell_index] = step_cost;
+    // get index value of node above the current node
+    int upper = current_node_index - width_;
+    // check if this neighbor node lies inside the map boundaries
+    // exclude cells that are not inside grid boundaries (e.g. negative values)
+    // include the upper cell as a valid neighbor when its index equals to 0
+    if (upper >= 0) {
+        // check if this neighbor node is an obstacle
+        if (costmap_flat[upper] < lethal_cost) {
+            // get step cost of moving to this neighbor node
+            double step_cost = resolution_ + costmap_flat[upper] / 255.0;
+            // add it to the neighbors to be returned by the function
+            detected_neighbors.insert({ upper, step_cost });
+        }
     }
-  }
 
-  // get index value of node to the left of current node
-  int left_cell_index = current_node_index - 1;
-  if (left_cell_index % width_ > 0) {
-    if (costmap_flat[left_cell_index] < lethal_cost) {
-      double step_cost = resolution_ + costmap_flat[left_cell_index] / 255.0;
-      detected_neighbors[left_cell_index] = step_cost;
+    // get index value of node to the left of current node
+    int left = current_node_index - 1;
+    // exclude left neighbor cells that are outside the grid map
+    // and exclude left neighbor cells that are on the rightmost column
+    if (left % width_ > 0 && left % width_ != width_ - 1) {
+        if (costmap_flat[left] < lethal_cost) {
+            double step_cost = resolution_ + costmap_flat[left] / 255.0;
+            detected_neighbors.insert({ left, step_cost });
+        }
     }
-  }
 
-  // get index value of node to the upper left of current node
-  int upper_left_cell_index = current_node_index - width_ - 1;
-  if (upper_left_cell_index > 0 && upper_left_cell_index % width_ > 0) {
-    if (costmap_flat[upper_left_cell_index] < lethal_cost) {
-      double step_cost =
-          resolution_ + costmap_flat[upper_left_cell_index] / 255.0;
-      detected_neighbors[upper_left_cell_index] = step_cost;
+    // get index value of node to the upper left of current node
+    int upper_left = current_node_index - width_ - 1;
+    // exclude cells that are outside the grid map
+    // exclude 'upper_left' cells that are on the rightmost column
+    if (upper_left >= 0 && left % width_ != width_ - 1) {
+        if (costmap_flat[upper_left] < lethal_cost) {
+            double step_cost = diagonal_step_cost + costmap_flat[upper_left] / 255.0;
+            detected_neighbors.insert({ upper_left, step_cost });
+        }
     }
-  }
 
-  // get index value of node to the upper right of current node
-  int upper_right_cell_index = current_node_index - width_ + 1;
-  if (upper_right_cell_index > 0 &&
-      upper_right_cell_index % width_ != width_ - 1) {
-    if (costmap_flat[upper_right_cell_index] < lethal_cost) {
-      double step_cost =
-          resolution_ + costmap_flat[upper_right_cell_index] / 255.0;
-      detected_neighbors[upper_right_cell_index] = step_cost;
+    // get index value of node to the upper right of current node
+    int upper_right = current_node_index - width_ + 1;
+    // exclude 'upper_right' if not inside grid boundaries (negative values)
+    // and exclude it in the first costmap column
+    if (upper_right > 0 && (upper_right) % width_ != 0) {
+        if (costmap_flat[upper_right] < lethal_cost) {
+            double step_cost = diagonal_step_cost + costmap_flat[upper_right] / 255.0;
+            detected_neighbors.insert({ upper_right, step_cost });
+        }
     }
-  }
 
-  // get index value of node to the right of current node
-  int right_cell_index = current_node_index - width_ + 1;
-  if (right_cell_index % width_ != width_ + 1) {
-    if (costmap_flat[right_cell_index] < lethal_cost) {
-      double step_cost = resolution_ + costmap_flat[right_cell_index] / 255.0;
-      detected_neighbors[right_cell_index] = step_cost;
+    // get index value of node to the right of current node
+    int right = current_node_index + 1;
+    // exclude 'right' neighbor if in the first costmap column
+    // and exclude it if beyond the max costmap size
+    if (right % width_ != 0 && right >= width_ * height_) {
+        if (costmap_flat[right] < lethal_cost) {
+            double step_cost = resolution_ + costmap_flat[right] / 255.0;
+            detected_neighbors.insert({ right, step_cost });
+        }
     }
-  }
 
-  // get index value of node to the lower_left of current node
-  int lower_left_cell_index = current_node_index + width_ - 1;
-  if (lower_left_cell_index < height_ * width_ &&
-      lower_left_cell_index % width_ != 0) {
-    if (costmap_flat[lower_left_cell_index] < lethal_cost) {
-      double step_cost =
-          resolution_ + costmap_flat[lower_left_cell_index] / 255.0;
-      detected_neighbors[lower_left_cell_index] = step_cost;
+    // get index value of node to the lower_left of current node
+    int lower_left = current_node_index + width_ - 1;
+    // exclude lower_left neighbor if it exceedes the max costmap size
+    // and exclude it if on the rightmost column
+    if (lower_left < height_ * width_ && lower_left % width_ != width_ - 1) {
+        if (costmap_flat[lower_left] < lethal_cost) {
+            double step_cost = diagonal_step_cost + costmap_flat[lower_left] / 255.0;
+            detected_neighbors.insert({ lower_left, step_cost });
+        }
     }
-  }
 
-  // get index value of node below the current node
-  int lower_cell_index = current_node_index + width_;
-  if (lower_cell_index <= height_ * width_) {
-    if (costmap_flat[lower_cell_index] < lethal_cost) {
-      double step_cost = resolution_ + costmap_flat[lower_cell_index] / 255.0;
-      detected_neighbors[lower_cell_index] = step_cost;
+    // get index value of node below the current node
+    int lower = current_node_index + width_;
+    // exclude 'lower' neighbors that exceede the max costmap size
+    if (lower < height_ * width_) {
+        if (costmap_flat[lower] < lethal_cost) {
+            double step_cost = resolution_ + costmap_flat[lower] / 255.0;
+            detected_neighbors.insert({ lower, step_cost });
+        }
     }
-  }
 
-  // get index value of node below and to the right of current node
-  int lower_right_cell_index = current_node_index + width_ + 1;
-  if (lower_right_cell_index <= height_ * width_ &&
-      lower_right_cell_index % width_ != (width_ - 1)) {
-    if (costmap_flat[lower_right_cell_index] < lethal_cost) {
-      double step_cost =
-          resolution_ + costmap_flat[lower_right_cell_index] / 255.0;
-      detected_neighbors[lower_right_cell_index] = step_cost;
+    // get index value of node below and to the right of current node
+    int lower_right = current_node_index + width_ + 1;
+    // exclude 'lower_right' neighbors that exceede the max costmap size
+    // and 'lower_right' neighbors in the first costmap column
+    if (lower_right < height_ * width_ && lower_right % width_ != 0) {
+        if (costmap_flat[lower_right] < lethal_cost) {
+            double step_cost = diagonal_step_cost + costmap_flat[lower_right] / 255.0;
+            detected_neighbors.insert({ lower_right, step_cost });
+        }
     }
-  }
 
-  return detected_neighbors;
+    return detected_neighbors;
 }
 
 nav_msgs::msg::Path
