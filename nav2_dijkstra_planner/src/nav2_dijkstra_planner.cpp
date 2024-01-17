@@ -3,7 +3,6 @@
 #include <cmath>
 #include <memory>
 #include <string>
-
 #include "nav2_dijkstra_planner/nav2_dijkstra_planner.hpp"
 
 namespace nav2_dijkstra_planner {
@@ -265,6 +264,10 @@ DijkstraGlobalPlanner::createPlan(const geometry_msgs::msg::PoseStamped &start,
   return global_path;
 }
 
+bool compareBySecond(const std::pair<int, double> &a, const std::pair<int, double> &b) {
+    return a.second < b.second;
+}
+
 bool DijkstraGlobalPlanner::dijkstraShortestPath(
     const int &start_cell_index, const int &goal_cell_index,
     const std::vector<int> &costmap_flat, std::vector<int> &shortest_path) {
@@ -297,7 +300,76 @@ bool DijkstraGlobalPlanner::dijkstraShortestPath(
   RCLCPP_INFO(node_->get_logger(), "Dijkstra: Done with initialization");
 
   /** YOUR CODE STARTS HERE */
+    while (!open_list.empty()) {
+    
+        std::sort(open_list.begin(), open_list.end(), compareBySecond);
+        int current_node = open_list[0].first;
+        open_list.erase(open_list.begin());  
+        closed_list.insert(current_node);
 
+        if (current_node == goal_cell_index) {
+            path_found = true;
+            break;
+        }
+
+    
+
+    std::unordered_map<int, double> neighbors = find_neighbors(current_node, costmap_flat);
+
+    for (auto it_neighbour = neighbors.begin(); it_neighbour!=neighbors.end(); ++it_neighbour) {
+        int neighbor_index = it_neighbour->first;
+        double step_cost = it_neighbour->second;
+
+      if (closed_list.find(neighbor_index) != closed_list.end()) {
+        continue;
+      }
+
+      double g_cost = g_costs[current_node] + step_cost;
+
+    bool in_open_list = false;
+    size_t idx;
+
+    // Check if neighbor_index is in open_list
+    for (idx = 0; idx < open_list.size(); ++idx) {
+        if (open_list[idx].first == neighbor_index) {
+            in_open_list = true;
+            break;
+        }
+    }
+
+      if (in_open_list) {
+        if (g_cost < g_costs[neighbor_index]) {
+          g_costs[neighbor_index] = g_cost;
+          parents[neighbor_index] = current_node;
+          open_list[idx].first = neighbor_index;
+          open_list[idx].second = g_cost;
+        }
+      } else {
+        g_costs[neighbor_index] = g_cost;
+        parents[neighbor_index] = current_node;
+        open_list.push_back(std::make_pair(neighbor_index, g_cost));
+      }
+    }
+
+
+  }
+
+  RCLCPP_INFO(node_->get_logger(), "Dijkstra: Done traversing nodes in open_list");
+
+  if (!path_found) {
+    RCLCPP_WARN(node_->get_logger(), "Dijkstra: No path found!");
+    return false;
+  }
+  
+  int node = goal_cell_index;
+  shortest_path.push_back(goal_cell_index);
+  while (node != start_cell_index) {
+    shortest_path.push_back(node);
+    node = parents[node];
+  }
+  std::reverse(shortest_path.begin(), shortest_path.end());
+
+  RCLCPP_INFO(node_->get_logger(), "Dijkstra: Done reconstructing path");
   /** YOUR CODE ENDS HERE */
 
   return true;
